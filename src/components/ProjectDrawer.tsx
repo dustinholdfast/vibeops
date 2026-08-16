@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useProjectStore } from '../store/useProjectStore';
-import { formatLastTouched, formatFullDate, cn } from '../lib/utils';
-import type { Stage, Priority } from '../types';
 import {
-  X,
-  ExternalLink,
-  Github,
-  Pencil,
-  Check,
-  Trash2,
-} from 'lucide-react';
+  formatLastTouched,
+  formatFullDate,
+  formatTargetDate,
+  getDeadlineState,
+  deadlineLabel,
+  cn,
+  HEALTH_OPTIONS,
+  HEALTH_HELP,
+} from '../lib/utils';
+import type { Stage, Priority, Health } from '../types';
+import { X, ExternalLink, Github, Pencil, Check, Trash2 } from 'lucide-react';
 
 const stages: Stage[] = ['Exploring', 'Building', 'Testing', 'Live', 'Paused', 'Archived'];
 const priorities: Priority[] = ['Now', 'Next', 'Later'];
@@ -33,6 +35,8 @@ export function ProjectDrawer() {
     setPriority,
     setStage,
     setNextAction,
+    setHealth,
+    setTargetDate,
     deleteProject,
   } = useProjectStore();
 
@@ -57,21 +61,25 @@ export function ProjectDrawer() {
     setEditingAction(false);
   };
 
+  const deadline = getDeadlineState(project.targetDate, project.stage);
+
   return (
     <AnimatePresence>
       {isDrawerOpen && (
         <>
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={closeDrawer}
             className="fixed inset-0 bg-black/50 z-40"
+            aria-hidden
           />
 
-          {/* Drawer */}
           <motion.aside
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="drawer-title"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -81,7 +89,9 @@ export function ProjectDrawer() {
             {/* Header */}
             <div className="flex items-start justify-between px-5 py-4 border-b border-border-subtle">
               <div className="min-w-0 flex-1">
-                <h2 className="text-lg font-semibold text-text truncate">{project.name}</h2>
+                <h2 id="drawer-title" className="text-lg font-semibold text-text truncate">
+                  {project.name}
+                </h2>
                 <div className="mt-1.5 h-1 w-24 rounded-full bg-border-subtle overflow-hidden">
                   <div
                     className="h-full bg-purple rounded-full"
@@ -90,8 +100,10 @@ export function ProjectDrawer() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={closeDrawer}
                 className="p-1.5 rounded-lg text-text-dim hover:text-text hover:bg-surface-elevated transition-colors"
+                aria-label="Close project details"
               >
                 <X size={18} />
               </button>
@@ -101,14 +113,18 @@ export function ProjectDrawer() {
             <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
               {/* Stage */}
               <div>
-                <label className="text-xs font-medium text-text-dim uppercase tracking-wider">
+                <label
+                  htmlFor="drawer-stage"
+                  className="text-xs font-medium text-text-dim uppercase tracking-wider"
+                >
                   Stage
                 </label>
                 <div className="mt-2 relative">
                   <select
+                    id="drawer-stage"
                     value={project.stage}
                     onChange={(e) => setStage(project.id, e.target.value as Stage)}
-                    className="w-full appearance-none bg-surface-elevated border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-purple/50"
+                    className="w-full appearance-none bg-surface-elevated border border-border rounded-lg px-3 py-2 pl-7 text-sm text-text focus:outline-none focus:border-purple/50"
                   >
                     {stages.map((s) => (
                       <option key={s} value={s}>
@@ -121,19 +137,25 @@ export function ProjectDrawer() {
                       'absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none',
                       stageDot[project.stage]
                     )}
+                    aria-hidden
                   />
                 </div>
               </div>
 
               {/* Priority */}
               <div>
-                <label className="text-xs font-medium text-text-dim uppercase tracking-wider">
+                <span className="text-xs font-medium text-text-dim uppercase tracking-wider">
                   Priority
-                </label>
-                <div className="mt-2 flex rounded-lg overflow-hidden border border-border">
+                </span>
+                <div
+                  className="mt-2 flex rounded-lg overflow-hidden border border-border"
+                  role="group"
+                  aria-label="Priority"
+                >
                   {priorities.map((p) => (
                     <button
                       key={p}
+                      type="button"
                       onClick={() => setPriority(project.id, p)}
                       className={cn(
                         'flex-1 py-2 text-sm font-medium transition-colors',
@@ -141,11 +163,87 @@ export function ProjectDrawer() {
                           ? 'bg-purple text-white'
                           : 'bg-surface-elevated text-text-muted hover:text-text'
                       )}
+                      aria-pressed={project.priority === p}
                     >
                       {p}
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Health — near purpose / next action */}
+              <div>
+                <label
+                  htmlFor="drawer-health"
+                  className="text-xs font-medium text-text-dim uppercase tracking-wider"
+                >
+                  Health
+                </label>
+                <select
+                  id="drawer-health"
+                  value={project.health}
+                  onChange={(e) => setHealth(project.id, e.target.value as Health)}
+                  className="mt-2 w-full appearance-none bg-surface-elevated border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-purple/50"
+                >
+                  {HEALTH_OPTIONS.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-text-dim leading-relaxed">
+                  {HEALTH_HELP[project.health]}
+                </p>
+              </div>
+
+              {/* Target date */}
+              <div>
+                <label
+                  htmlFor="drawer-target"
+                  className="text-xs font-medium text-text-dim uppercase tracking-wider"
+                >
+                  Target date
+                </label>
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    id="drawer-target"
+                    type="date"
+                    value={project.targetDate ?? ''}
+                    onChange={(e) =>
+                      setTargetDate(project.id, e.target.value || null)
+                    }
+                    className="flex-1 bg-surface-elevated border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-purple/50"
+                  />
+                  {project.targetDate && (
+                    <button
+                      type="button"
+                      onClick={() => setTargetDate(project.id, null)}
+                      className="text-xs text-text-dim hover:text-text underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1.5 text-xs text-text-dim">
+                  {deadline === 'none' ? (
+                    <span className="italic">Set a target date to surface deadline signals.</span>
+                  ) : (
+                    <>
+                      <span
+                        className={cn(
+                          deadline === 'overdue' && 'text-danger font-medium',
+                          deadline === 'due-today' && 'text-warning font-medium',
+                          deadline === 'due-soon' && 'text-orange'
+                        )}
+                      >
+                        {deadlineLabel(deadline)}
+                      </span>
+                      {project.targetDate && deadline !== 'inactive' && (
+                        <> · {formatTargetDate(project.targetDate)}</>
+                      )}
+                    </>
+                  )}
+                </p>
               </div>
 
               {/* Next action */}
@@ -156,8 +254,10 @@ export function ProjectDrawer() {
                   </label>
                   {!editingAction && (
                     <button
+                      type="button"
                       onClick={() => setEditingAction(true)}
                       className="p-1 text-text-dim hover:text-purple-light"
+                      aria-label="Edit next action"
                     >
                       <Pencil size={14} />
                     </button>
@@ -172,15 +272,18 @@ export function ProjectDrawer() {
                       onChange={(e) => setActionDraft(e.target.value)}
                       rows={3}
                       className="w-full bg-surface-elevated border border-purple/50 rounded-lg px-3 py-2 text-sm text-text focus:outline-none resize-none"
+                      aria-label="Next action"
                     />
                     <div className="flex gap-2">
                       <button
+                        type="button"
                         onClick={saveAction}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple text-white text-sm font-medium"
                       >
                         <Check size={14} /> Save
                       </button>
                       <button
+                        type="button"
                         onClick={() => {
                           setActionDraft(project.nextAction);
                           setEditingAction(false);
@@ -207,9 +310,9 @@ export function ProjectDrawer() {
 
               {/* Progress */}
               <div>
-                <label className="text-xs font-medium text-text-dim uppercase tracking-wider">
+                <span className="text-xs font-medium text-text-dim uppercase tracking-wider">
                   Progress
-                </label>
+                </span>
                 <div className="mt-2 flex items-center gap-3">
                   <div className="flex-1 h-2 rounded-full bg-border-subtle overflow-hidden">
                     <div
@@ -217,15 +320,17 @@ export function ProjectDrawer() {
                       style={{ width: `${project.progress}%` }}
                     />
                   </div>
-                  <span className="text-sm tabular-nums text-text-muted">{project.progress}%</span>
+                  <span className="text-sm tabular-nums text-text-muted">
+                    {project.progress}%
+                  </span>
                 </div>
               </div>
 
               {/* Links */}
               <div>
-                <label className="text-xs font-medium text-text-dim uppercase tracking-wider">
+                <span className="text-xs font-medium text-text-dim uppercase tracking-wider">
                   Links
-                </label>
+                </span>
                 <div className="mt-2 space-y-2">
                   {project.liveUrl ? (
                     <a
@@ -234,7 +339,7 @@ export function ProjectDrawer() {
                       rel="noreferrer"
                       className="flex items-center gap-2 text-sm text-text-muted hover:text-purple-light"
                     >
-                      <ExternalLink size={14} /> Live URL
+                      <ExternalLink size={14} aria-hidden /> Live URL
                     </a>
                   ) : (
                     <span className="text-sm text-text-dim">No live URL</span>
@@ -246,7 +351,7 @@ export function ProjectDrawer() {
                       rel="noreferrer"
                       className="flex items-center gap-2 text-sm text-text-muted hover:text-purple-light"
                     >
-                      <Github size={14} /> GitHub repo
+                      <Github size={14} aria-hidden /> GitHub repo
                     </a>
                   ) : null}
                 </div>
@@ -254,16 +359,19 @@ export function ProjectDrawer() {
 
               {/* Activity */}
               <div>
-                <label className="text-xs font-medium text-text-dim uppercase tracking-wider">
+                <span className="text-xs font-medium text-text-dim uppercase tracking-wider">
                   Activity
-                </label>
+                </span>
                 <div className="mt-3 space-y-3">
                   {project.activity.length === 0 ? (
                     <p className="text-sm text-text-dim">No activity yet.</p>
                   ) : (
                     project.activity.slice(0, 8).map((item) => (
                       <div key={item.id} className="flex gap-3">
-                        <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-purple flex-shrink-0" />
+                        <div
+                          className="mt-1.5 w-1.5 h-1.5 rounded-full bg-purple flex-shrink-0"
+                          aria-hidden
+                        />
                         <div className="min-w-0">
                           <p className="text-sm text-text">{item.message}</p>
                           <p className="text-xs text-text-dim mt-0.5">
@@ -281,6 +389,7 @@ export function ProjectDrawer() {
             {/* Footer */}
             <div className="px-5 py-4 border-t border-border-subtle flex items-center justify-between">
               <button
+                type="button"
                 onClick={() => {
                   if (confirm(`Delete “${project.name}”?`)) {
                     deleteProject(project.id);
@@ -288,9 +397,10 @@ export function ProjectDrawer() {
                 }}
                 className="inline-flex items-center gap-1.5 text-sm text-danger hover:text-danger/80"
               >
-                <Trash2 size={14} /> Delete
+                <Trash2 size={14} aria-hidden /> Delete
               </button>
               <button
+                type="button"
                 onClick={closeDrawer}
                 className="px-4 py-2 rounded-lg bg-surface-elevated border border-border text-sm text-text hover:bg-border transition-colors"
               >
