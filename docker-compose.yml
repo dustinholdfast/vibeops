@@ -1,0 +1,14 @@
+services:
+  vibeops:
+    build: .
+    container_name: vibeops
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
+    # Uncomment the volume below if you want to persist data outside the browser
+    # (the app currently uses localStorage, so this is optional)
+    # volumes:
+    #   - vibeops-data:/data
+
+# volumes:
+#   vibeops-data:
