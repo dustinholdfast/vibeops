@@ -12,6 +12,8 @@ import type {
 } from '../types';
 import { generateId, toLocalDateString } from '../lib/utils';
 
+export const MAX_NOW_SLOTS = 3;
+
 interface ProjectState {
   projects: Project[];
   filter: FilterStage;
@@ -44,9 +46,17 @@ interface ProjectState {
   setNextAction: (id: string, nextAction: string) => void;
   setHealth: (id: string, health: Health) => void;
   setTargetDate: (id: string, targetDate: string | null) => void;
+  setProgress: (id: string, progress: number) => void;
+  setLiveUrl: (id: string, liveUrl: string | undefined) => void;
+  setRepoUrl: (id: string, repoUrl: string | undefined) => void;
   touchProject: (id: string) => void;
   deleteProject: (id: string) => void;
   addActivity: (id: string, item: Omit<ActivityItem, 'id' | 'timestamp'>) => void;
+  /** Returns a JSON-serializable snapshot of all projects for export */
+  getExportPayload: () => { version: 1; exportedAt: string; projects: Project[] };
+  /** Replace all projects with an imported list (validates shape lightly) */
+  importProjects: (projects: Project[]) => void;
+  clearAllProjects: () => void;
 }
 
 const initialProjects: Project[] = [
@@ -189,6 +199,8 @@ export const useProjectStore = create<ProjectState>()(
       setPriority: (id, priority) => {
         const project = get().projects.find((p) => p.id === id);
         if (!project || project.priority === priority) return;
+
+        // Soft limit: allow > MAX_NOW_SLOTS but the UI surfaces a warning
         get().addActivity(id, {
           type: 'priority',
           message: `Priority updated to ${priority}`,
@@ -243,6 +255,44 @@ export const useProjectStore = create<ProjectState>()(
         get().updateProject(id, { targetDate });
       },
 
+      setProgress: (id, progress) => {
+        const clamped = Math.max(0, Math.min(100, Math.round(progress)));
+        const project = get().projects.find((p) => p.id === id);
+        if (!project || project.progress === clamped) return;
+        get().addActivity(id, {
+          type: 'action',
+          message: `Progress set to ${clamped}%`,
+          author: 'You',
+        });
+        get().updateProject(id, { progress: clamped });
+      },
+
+      setLiveUrl: (id, liveUrl) => {
+        const normalized = liveUrl?.trim() || undefined;
+        const project = get().projects.find((p) => p.id === id);
+        if (!project) return;
+        if ((project.liveUrl || undefined) === normalized) return;
+        get().addActivity(id, {
+          type: 'action',
+          message: normalized ? `Live URL set` : 'Live URL cleared',
+          author: 'You',
+        });
+        get().updateProject(id, { liveUrl: normalized });
+      },
+
+      setRepoUrl: (id, repoUrl) => {
+        const normalized = repoUrl?.trim() || undefined;
+        const project = get().projects.find((p) => p.id === id);
+        if (!project) return;
+        if ((project.repoUrl || undefined) === normalized) return;
+        get().addActivity(id, {
+          type: 'action',
+          message: normalized ? `Repo URL set` : 'Repo URL cleared',
+          author: 'You',
+        });
+        get().updateProject(id, { repoUrl: normalized });
+      },
+
       touchProject: (id) => {
         get().addActivity(id, {
           type: 'touched',
@@ -273,6 +323,48 @@ export const useProjectStore = create<ProjectState>()(
               : p
           ),
         }));
+      },
+
+      getExportPayload: () => ({
+        version: 1 as const,
+        exportedAt: new Date().toISOString(),
+        projects: get().projects,
+      }),
+
+      importProjects: (incoming) => {
+        if (!Array.isArray(incoming)) return;
+        const sanitized: Project[] = incoming
+          .filter((p) => p && typeof p === 'object' && typeof p.name === 'string')
+          .map((p) => ({
+            id: typeof p.id === 'string' ? p.id : generateId(),
+            name: String(p.name),
+            nextAction: typeof p.nextAction === 'string' ? p.nextAction : 'Define the first slice',
+            stage: (['Exploring', 'Building', 'Testing', 'Live', 'Paused', 'Archived'].includes(p.stage)
+              ? p.stage
+              : 'Exploring') as Stage,
+            priority: (['Now', 'Next', 'Later'].includes(p.priority) ? p.priority : 'Later') as Priority,
+            health: (['On track', 'At risk', 'Blocked'].includes(p.health) ? p.health : 'On track') as Health,
+            targetDate: typeof p.targetDate === 'string' ? p.targetDate : null,
+            lastTouched: typeof p.lastTouched === 'string' ? p.lastTouched : new Date().toISOString(),
+            createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date().toISOString(),
+            liveUrl: typeof p.liveUrl === 'string' ? p.liveUrl : undefined,
+            repoUrl: typeof p.repoUrl === 'string' ? p.repoUrl : undefined,
+            progress: typeof p.progress === 'number' ? Math.max(0, Math.min(100, p.progress)) : 0,
+            activity: Array.isArray(p.activity) ? p.activity.slice(0, 50) : [],
+          }));
+        set({
+          projects: sanitized,
+          selectedId: null,
+          isDrawerOpen: false,
+        });
+      },
+
+      clearAllProjects: () => {
+        set({
+          projects: [],
+          selectedId: null,
+          isDrawerOpen: false,
+        });
       },
     }),
     {

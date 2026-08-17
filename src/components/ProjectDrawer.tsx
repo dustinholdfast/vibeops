@@ -12,7 +12,7 @@ import {
   HEALTH_HELP,
 } from '../lib/utils';
 import type { Stage, Priority, Health } from '../types';
-import { X, ExternalLink, Github, Pencil, Check, Trash2 } from 'lucide-react';
+import { X, ExternalLink, Github, Pencil, Check, Trash2, Hand } from 'lucide-react';
 
 const stages: Stage[] = ['Exploring', 'Building', 'Testing', 'Live', 'Paused', 'Archived'];
 const priorities: Priority[] = ['Now', 'Next', 'Later'];
@@ -37,6 +37,10 @@ export function ProjectDrawer() {
     setNextAction,
     setHealth,
     setTargetDate,
+    setProgress,
+    setLiveUrl,
+    setRepoUrl,
+    touchProject,
     deleteProject,
   } = useProjectStore();
 
@@ -44,11 +48,17 @@ export function ProjectDrawer() {
 
   const [editingAction, setEditingAction] = useState(false);
   const [actionDraft, setActionDraft] = useState('');
+  const [liveDraft, setLiveDraft] = useState('');
+  const [repoDraft, setRepoDraft] = useState('');
+  const [editingLinks, setEditingLinks] = useState(false);
 
   useEffect(() => {
     if (project) {
       setActionDraft(project.nextAction);
+      setLiveDraft(project.liveUrl ?? '');
+      setRepoDraft(project.repoUrl ?? '');
       setEditingAction(false);
+      setEditingLinks(false);
     }
   }, [project?.id]);
 
@@ -59,6 +69,12 @@ export function ProjectDrawer() {
       setNextAction(project.id, actionDraft.trim());
     }
     setEditingAction(false);
+  };
+
+  const saveLinks = () => {
+    setLiveUrl(project.id, liveDraft.trim() || undefined);
+    setRepoUrl(project.id, repoDraft.trim() || undefined);
+    setEditingLinks(false);
   };
 
   const deadline = getDeadlineState(project.targetDate, project.stage);
@@ -171,7 +187,7 @@ export function ProjectDrawer() {
                 </div>
               </div>
 
-              {/* Health — near purpose / next action */}
+              {/* Health */}
               <div>
                 <label
                   htmlFor="drawer-health"
@@ -302,59 +318,151 @@ export function ProjectDrawer() {
                   </p>
                 )}
 
-                <p className="mt-2 text-xs text-text-dim">
-                  Last touched {formatLastTouched(project.lastTouched)} · Created{' '}
-                  {formatFullDate(project.createdAt)}
-                </p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className="text-xs text-text-dim">
+                    Last touched {formatLastTouched(project.lastTouched)} · Created{' '}
+                    {formatFullDate(project.createdAt)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => touchProject(project.id)}
+                    className="inline-flex items-center gap-1 text-xs text-purple-light hover:underline"
+                    title="Mark as touched now"
+                  >
+                    <Hand size={12} /> Touch
+                  </button>
+                </div>
               </div>
 
-              {/* Progress */}
+              {/* Progress — now editable */}
               <div>
-                <span className="text-xs font-medium text-text-dim uppercase tracking-wider">
-                  Progress
-                </span>
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="drawer-progress"
+                    className="text-xs font-medium text-text-dim uppercase tracking-wider"
+                  >
+                    Progress
+                  </label>
+                  <span className="text-sm tabular-nums text-text-muted">{project.progress}%</span>
+                </div>
                 <div className="mt-2 flex items-center gap-3">
-                  <div className="flex-1 h-2 rounded-full bg-border-subtle overflow-hidden">
-                    <div
-                      className="h-full bg-purple rounded-full transition-all"
-                      style={{ width: `${project.progress}%` }}
-                    />
-                  </div>
-                  <span className="text-sm tabular-nums text-text-muted">
-                    {project.progress}%
-                  </span>
+                  <input
+                    id="drawer-progress"
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={project.progress}
+                    onChange={(e) => setProgress(project.id, Number(e.target.value))}
+                    className="flex-1 accent-purple h-2"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={project.progress}
+                  />
+                </div>
+                <div className="mt-1.5 h-2 rounded-full bg-border-subtle overflow-hidden">
+                  <div
+                    className="h-full bg-purple rounded-full transition-all"
+                    style={{ width: `${project.progress}%` }}
+                  />
                 </div>
               </div>
 
-              {/* Links */}
+              {/* Links — editable */}
               <div>
-                <span className="text-xs font-medium text-text-dim uppercase tracking-wider">
-                  Links
-                </span>
-                <div className="mt-2 space-y-2">
-                  {project.liveUrl ? (
-                    <a
-                      href={project.liveUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-2 text-sm text-text-muted hover:text-purple-light"
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-text-dim uppercase tracking-wider">
+                    Links
+                  </span>
+                  {!editingLinks && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingLinks(true)}
+                      className="p-1 text-text-dim hover:text-purple-light"
+                      aria-label="Edit links"
                     >
-                      <ExternalLink size={14} aria-hidden /> Live URL
-                    </a>
-                  ) : (
-                    <span className="text-sm text-text-dim">No live URL</span>
+                      <Pencil size={14} />
+                    </button>
                   )}
-                  {project.repoUrl ? (
-                    <a
-                      href={project.repoUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-2 text-sm text-text-muted hover:text-purple-light"
-                    >
-                      <Github size={14} aria-hidden /> GitHub repo
-                    </a>
-                  ) : null}
                 </div>
+
+                {editingLinks ? (
+                  <div className="mt-2 space-y-2">
+                    <div>
+                      <label htmlFor="drawer-live" className="text-xs text-text-dim">
+                        Live URL
+                      </label>
+                      <input
+                        id="drawer-live"
+                        type="url"
+                        placeholder="https://…"
+                        value={liveDraft}
+                        onChange={(e) => setLiveDraft(e.target.value)}
+                        className="mt-1 w-full bg-surface-elevated border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-purple/50"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="drawer-repo" className="text-xs text-text-dim">
+                        GitHub repo
+                      </label>
+                      <input
+                        id="drawer-repo"
+                        type="url"
+                        placeholder="https://github.com/…"
+                        value={repoDraft}
+                        onChange={(e) => setRepoDraft(e.target.value)}
+                        className="mt-1 w-full bg-surface-elevated border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-purple/50"
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={saveLinks}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple text-white text-sm font-medium"
+                      >
+                        <Check size={14} /> Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLiveDraft(project.liveUrl ?? '');
+                          setRepoDraft(project.repoUrl ?? '');
+                          setEditingLinks(false);
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-sm text-text-muted hover:text-text"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {project.liveUrl ? (
+                      <a
+                        href={project.liveUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-2 text-sm text-text-muted hover:text-purple-light"
+                      >
+                        <ExternalLink size={14} aria-hidden /> Live URL
+                      </a>
+                    ) : (
+                      <span className="text-sm text-text-dim">No live URL</span>
+                    )}
+                    {project.repoUrl ? (
+                      <a
+                        href={project.repoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-2 text-sm text-text-muted hover:text-purple-light"
+                      >
+                        <Github size={14} aria-hidden /> GitHub repo
+                      </a>
+                    ) : (
+                      <span className="text-sm text-text-dim">No repo URL</span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Activity */}

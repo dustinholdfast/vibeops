@@ -1,4 +1,4 @@
-import { useProjectStore } from '../store/useProjectStore';
+import { useProjectStore, MAX_NOW_SLOTS } from '../store/useProjectStore';
 import { differenceInDays } from 'date-fns';
 import { cn, getDeadlineState } from '../lib/utils';
 import type { Project } from '../types';
@@ -24,7 +24,7 @@ export function StatusCards() {
     Testing: projects.filter((p) => p.stage === 'Testing').length,
   };
 
-  const claimedToday = nowProjects[0];
+  const overNowLimit = nowProjects.length > MAX_NOW_SLOTS;
 
   // Attention signals
   const overdue = projects.filter(
@@ -32,9 +32,14 @@ export function StatusCards() {
   );
   const blocked = projects.filter((p) => p.health === 'Blocked');
   const atRisk = projects.filter((p) => p.health === 'At risk');
-  const stale = rotting; // already computed
+  const stale = rotting;
 
-  const attentionItems: { label: string; count: number; projects: Project[]; filterAction: () => void }[] = [
+  const attentionItems: {
+    label: string;
+    count: number;
+    projects: Project[];
+    filterAction: () => void;
+  }[] = [
     {
       label: 'Overdue',
       count: overdue.length,
@@ -70,8 +75,6 @@ export function StatusCards() {
       count: stale.length,
       projects: stale,
       filterAction: () => {
-        // We keep the rotting list visible via the existing Rotting card;
-        // no dedicated filter value, so just clear other filters.
         setFilter('All');
         setHealthFilter('All');
         setDeadlineFilter('All');
@@ -84,12 +87,14 @@ export function StatusCards() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* WORK ON THIS NOW — unchanged meaning */}
+        {/* WORK ON THIS NOW */}
         <div
           className={cn(
             'rounded-xl border p-4 transition-all',
-            claimedToday
-              ? 'border-purple/50 bg-purple/5 shadow-[0_0_20px_-5px_rgba(139,124,246,0.3)]'
+            nowProjects.length > 0
+              ? overNowLimit
+                ? 'border-warning/50 bg-warning/5'
+                : 'border-purple/50 bg-purple/5 shadow-[0_0_20px_-5px_rgba(139,124,246,0.3)]'
               : 'border-border bg-surface'
           )}
         >
@@ -97,31 +102,18 @@ export function StatusCards() {
             <h3 className="text-xs font-semibold tracking-wider text-purple-light uppercase">
               Work on this now
             </h3>
-            <span className="text-xs text-text-dim">
-              {nowProjects.length} / 3 now slots
+            <span
+              className={cn(
+                'text-xs tabular-nums',
+                overNowLimit ? 'text-warning font-medium' : 'text-text-dim'
+              )}
+            >
+              {nowProjects.length} / {MAX_NOW_SLOTS} now slots
+              {overNowLimit && ' · over limit'}
             </span>
           </div>
 
-          {claimedToday ? (
-            <div>
-              <p className="text-lg font-semibold text-text">{claimedToday.name}</p>
-              <p className="text-sm text-text-muted mt-1">{claimedToday.nextAction}</p>
-              <div className="mt-3 flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 text-xs">
-                  <span
-                    className={cn(
-                      'w-1.5 h-1.5 rounded-full',
-                      claimedToday.stage === 'Testing' && 'bg-orange',
-                      claimedToday.stage === 'Exploring' && 'bg-blue',
-                      claimedToday.stage === 'Building' && 'bg-purple'
-                    )}
-                  />
-                  {claimedToday.stage}
-                </span>
-              </div>
-              <p className="mt-3 text-xs text-text-dim">Everything else is quieter.</p>
-            </div>
-          ) : (
+          {nowProjects.length === 0 ? (
             <div className="py-2">
               <p className="text-sm text-text-muted">
                 No project is marked{' '}
@@ -130,6 +122,45 @@ export function StatusCards() {
               <p className="text-sm text-text-dim mt-1">
                 Pick one and everything else gets quieter.
               </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {nowProjects.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => openDrawer(p.id)}
+                  className="w-full text-left group"
+                >
+                  <p className="text-base font-semibold text-text group-hover:text-purple-light transition-colors">
+                    {p.name}
+                  </p>
+                  <p className="text-sm text-text-muted mt-0.5 truncate">{p.nextAction}</p>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs text-text-dim">
+                      <span
+                        className={cn(
+                          'w-1.5 h-1.5 rounded-full',
+                          p.stage === 'Testing' && 'bg-orange',
+                          p.stage === 'Exploring' && 'bg-blue',
+                          p.stage === 'Building' && 'bg-purple',
+                          p.stage === 'Live' && 'bg-success',
+                          (p.stage === 'Paused' || p.stage === 'Archived') && 'bg-text-dim'
+                        )}
+                      />
+                      {p.stage}
+                    </span>
+                  </div>
+                </button>
+              ))}
+              {overNowLimit && (
+                <p className="text-xs text-warning mt-1">
+                  Soft limit is {MAX_NOW_SLOTS}. Consider demoting some to Next.
+                </p>
+              )}
+              {!overNowLimit && nowProjects.length > 0 && (
+                <p className="text-xs text-text-dim mt-1">Everything else is quieter.</p>
+              )}
             </div>
           )}
         </div>
@@ -155,7 +186,7 @@ export function StatusCards() {
             <h3 className="text-xs font-semibold tracking-wider text-text-muted uppercase">
               In flight
             </h3>
-            <span className="text-xs text-text-dim">$0/mo burn</span>
+            <span className="text-xs text-text-dim">local only</span>
           </div>
           <div className="flex items-baseline gap-2 mb-3">
             <span className="text-4xl font-bold tabular-nums text-text">
@@ -194,7 +225,7 @@ export function StatusCards() {
         </div>
       </div>
 
-      {/* NEEDS ATTENTION — combined signal card */}
+      {/* NEEDS ATTENTION */}
       <div className="rounded-xl border border-border bg-surface p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-semibold tracking-wider text-text-muted uppercase">
