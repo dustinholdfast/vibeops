@@ -9,12 +9,15 @@ Everything stays on your machine — nothing leaves the box.
 
 ## Features
 
-- **Work on this Now** – claim up to 3 projects as your current focus
+- **Work on this Now** – claim projects as current focus (soft limit of 3 slots, with clear warning when exceeded)
 - **Rotting detector** – surfaces projects untouched for 7+ days
 - **In Flight** – live counts of Exploring / Building / Testing
 - Priority system: **Now / Next / Later**
 - Stages: Exploring → Building → Testing → Live → Paused → Archived
-- Project detail drawer (edit next action, change stage/priority, activity log)
+- Health: On track / At risk / Blocked
+- Target dates with overdue / due-today / due-soon signals
+- Project detail drawer (edit next action, stage, priority, health, target date, **progress**, **live & repo URLs**, activity log, touch)
+- **Export / Import** JSON for backups and moving data between machines
 - Fully client-side with **localStorage** persistence
 - Beautiful dark UI matching the original design language
 
@@ -57,6 +60,8 @@ npm run dev          # http://localhost:3001
 ```bash
 npm run build
 npm run preview      # production build preview
+npm run typecheck
+npm test             # runs deadline / health pure tests
 ```
 
 ---
@@ -65,8 +70,9 @@ npm run preview      # production build preview
 
 All data lives in the browser’s `localStorage` under the key `vibeops-storage`.
 
-- Clear data: open DevTools → Application → Local Storage → delete the key  
-- Export: you can copy the JSON from localStorage if you want a backup
+- **Export**: use the Export button in the header (downloads a versioned JSON snapshot)
+- **Import**: use the Import button and choose a previously exported JSON file (replaces current data after confirmation)
+- Clear data: open DevTools → Application → Local Storage → delete the key, or use Import with an empty `projects` array
 
 No backend, no accounts, no telemetry.
 
@@ -78,18 +84,19 @@ No backend, no accounts, no telemetry.
 src/
 ├── components/
 │   ├── Sidebar.tsx
-│   ├── Header.tsx
-│   ├── StatusCards.tsx
+│   ├── Header.tsx          # search, add, export/import
+│   ├── StatusCards.tsx     # Now / Rotting / In Flight / Needs Attention
 │   ├── ProjectList.tsx
-│   └── ProjectDrawer.tsx
+│   └── ProjectDrawer.tsx   # full edit surface including progress + links
 ├── store/
-│   └── useProjectStore.ts      # Zustand + persist
+│   └── useProjectStore.ts  # Zustand + persist + export/import
 ├── types/
 │   └── index.ts
 ├── lib/
-│   └── utils.ts
+│   ├── utils.ts
+│   └── deadline.test.ts
 ├── App.tsx
-└── index.css                   # Tailwind v4 + design tokens
+└── index.css               # Tailwind v4 + design tokens
 ```
 
 ---
@@ -98,6 +105,8 @@ src/
 
 Design tokens live in `src/index.css` under `@theme`.  
 Change the purple accent or surface colors there.
+
+The soft “Now” limit is controlled by `MAX_NOW_SLOTS` in `src/store/useProjectStore.ts`.
 
 ---
 
