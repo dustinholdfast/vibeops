@@ -39,9 +39,13 @@ export function Sidebar() {
     <aside className="w-56 flex-shrink-0 bg-surface border-r border-border-subtle flex flex-col h-full">
       {/* Logo */}
       <div className="px-4 py-5 flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-lg bg-purple flex items-center justify-center text-white font-bold text-sm">
-          V
-        </div>
+        <img
+          src="/logo.svg"
+          alt="VibeOps"
+          width={32}
+          height={32}
+          className="w-8 h-8 rounded-lg flex-shrink-0"
+        />
         <span className="font-semibold text-text tracking-tight">
           Vibe <span className="text-text-muted font-normal">/ Ops</span>
         </span>
