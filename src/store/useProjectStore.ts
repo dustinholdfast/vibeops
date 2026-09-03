@@ -375,9 +375,9 @@ export const useProjectStore = create<ProjectState>()(
         const p = persisted as Partial<ProjectState> | undefined;
         if (!p?.projects) return current;
         const migrated = p.projects.map((proj) => ({
-          health: 'On track' as Health,
-          targetDate: null as string | null,
           ...proj,
+          health: proj.health ?? ('On track' as Health),
+          targetDate: proj.targetDate ?? null,
         }));
         return { ...current, ...p, projects: migrated };
       },
